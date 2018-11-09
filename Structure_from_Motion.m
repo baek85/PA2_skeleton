@@ -56,7 +56,7 @@ R               = zeros(3, 3, number_of_pictures);
                 % = Camera rotation R of images. 3 x 3 x (# picture)
 T               = zeros(3, number_of_pictures);                      
                 % = Camera translation t of images. 3 x (# picture)
-
+eps = 0;
 % ADVICE : These matrices seem very difficult, but you will need sum data structures like them.
 
 
@@ -109,14 +109,11 @@ threshold_of_distance = 1;
 [M, ref] = max(sum(num_Match, 1));
 ref; % find out
 
-
 % Find the best pair of reference image.
 % It will be the one that has the largest # correspondences to the reference image.
 % Let's call it 'pair'
 [M, pair] = max(num_Match(ref,:));
 pair; % find out
-
-
 
 ref = 1; pair = 2;
 Image_selected(ref)=1;
@@ -125,8 +122,6 @@ Image_selected(pair)=1;
 % Give ref's R|T = I|0
 R(:, :, ref) = eye(3);
 T(:, ref) = zeros(3, 1);
-
-
 
 % Estimate E using 8,7-point algorithm or calibrated 5-point algorithm and RANSAC
 num_inliers = 0;
@@ -137,8 +132,8 @@ for a=1:number_of_iterations_for_5_point
     pair_x = Match(pair, perm, ref);
     
    %%  Q1 = right, Q2 = left
-    Q1 = inv(K)*[Feature(1:2,pair_x,pair); ones(1,5)];
-    Q2 = inv(K)*[Feature(1:2,ref_x,ref); ones(1,5)];    
+    Q1 = K \ [Feature(1:2,pair_x,pair); ones(1,5)];
+    Q2 = K \ [Feature(1:2,ref_x,ref); ones(1,5)];    
 
     Evec   = calibrated_fivepoint(Q1,Q2);
     for i=1:size(Evec,2)
@@ -146,36 +141,34 @@ for a=1:number_of_iterations_for_5_point
         % Check determinant constraint! 
         term1 = det(Etmp);
         % Check trace constraintk
-        term2 = 2 *Etmp*transpose(Etmp)*Etmp -trace(Etmp*transpose(Etmp))*Etmp;
+        term2 =  (2 * (Etmp * Etmp') - trace(Etmp * Etmp') * eye(3)) * Etmp;
         % Check reprojection errors
-        term3 = diag(Q1'*Etmp*Q2);
-        %if(abs(term1) < 1e-10 && abs(sum(sum(term2))) < 1e-10 && abs(sum(term3)) < 1e-10)
+        term3 = diag(Q1' * Etmp * Q2);
+        if(abs(term1) < 1e-10 && abs(sum(sum(term2))) < 1e-10 && abs(sum(term3)) < 1e-10)
             % find out
-            F = inv(K')*Etmp*inv(K);
-
+            F = K' \ Etmp / K;
             perm = 1:(num_Match(ref, pair));
             ref_x = Match(ref,perm, pair);
             pair_x = Match(pair,perm, ref);
 
             tmp = zeros(1,num_Match(ref,pair));
-            for i = 1:num_Match(ref,pair)
-                X1 = [Feature(1:2,pair_x(i), pair);1];
-                X2 = [Feature(1:2,ref_x(i),ref);1];
+            for ii = 1:num_Match(ref,pair)
+                X1 = [Feature(1:2,pair_x(ii), pair);1];
+                X2 = [Feature(1:2,ref_x(ii),ref);1];
 
-                term1 = F*X2;
-                term2 = F'*X1;
-                d2 = (X1'*F*X2)^2*(1/(term1(1)^2+term1(2)^2)+1/(term2(1)^2+term2(2)^2));
-                tmp(i) = d2;
+                term1 = F * X2;
+                term2 = F' * X1;
+                d2 = (X1' * F * X2)^2 * (1 / (term1(1)^2 + term1(2)^2) + 1 / (term2(1)^2 + term2(2)^2));
+                tmp(ii) = d2;
             end
-            sum(tmp<threshold_of_distance);
-            if(sum(tmp<threshold_of_distance)> num_inliers)
+            sum(tmp < threshold_of_distance);
+            if (sum(tmp < threshold_of_distance) > num_inliers)
                 Eret = Etmp;
                 num_inliers = sum(tmp<threshold_of_distance);
                 fprintf('5-point algorithm iters : %d    ', a);
                 fprintf('number of inliers = %d  / %d\n', num_inliers, num_Match(ref, pair));
-
             end
-        %end
+        end
         
     end
 end
@@ -185,64 +178,62 @@ E = Eret;
 
 % Decompose E into [Rp, Tp]
 
-[U, S, V] = svd(E);
+[U, S, V] = svd(sqrt(2)*E);
 %U = U * S(1,1);
 %V = V*S(1,1);
-W = [0 -1 0; 1 0 0; 0 0 0];  u3 = U*[0,0,1]';
+W = [0 -1 0; 1 0 0; 0 0 1];  u3 = U * [0,0,1]';
 
 %% Find optimal camera pose
 P = zeros(4,3,4);
-P(1,:,:) = [U*W*V', u3];
-P(2,:,:) = [U*W*V', -1 * u3];
-P(3,:,:) = [U*W'*V', u3];
-P(4,:,:) = [U*W'*V', -1 * u3];
+P(1,:,:) = [U * W * V', u3];
+P(2,:,:) = [U * W * V', -u3];
+P(3,:,:) = [U * W' * V', u3];
+P(4,:,:) = [U * W' * V', -u3];
 
 %num_outliers = zeros(4,1);
 num_inliers = zeros(4,1);
 X3tmp = zeros(4, 4, num_Match(ref,pair));
 WW = zeros(4,num_Match(ref,pair)); 
-for pidx = 1:4
-Ptmp = squeeze(P(pidx,:,:));
 
 %% Ppair1 , Ppair4  -> (depth >0)
+for pidx = 1:4
+    Ptmp = squeeze(P(pidx,:,:));
+    Rp = Ptmp(:,1:3); % find out
+    Tp = Ptmp(:,4); % find out
 
-Rp = Ptmp(:,1:3); % find out
-Tp = Ptmp(:,4); % find out
+    % (Optional) Optimize Rp and Tp
 
-% (Optional) Optimize Rp and Tp
+    % Give pair's R|T = Rp|Tp
+    R(:, :, pair) = Rp;
+    T(:, pair) = Tp;
 
-% Give pair's R|T = Rp|Tp
-R(:, :, pair) = Rp;
-T(:, pair) = Tp;
+    % Reconstruct 3D points using triangulation
+    P1 = K * [R(:,:,ref), T(:,ref)];
+    %P1 = [R(:,:,ref),T(:,ref)];
+    p1T1 = P1(1,:);
+    p2T1 = P1(2,:);
+    p3T1 = P1(3,:);
+    P2 = K * [R(:,:,pair), T(:,pair)];
+    p1T2 = P2(1,:);
+    p2T2 = P2(2,:);
+    p3T2 = P2(3,:);
 
-% Reconstruct 3D points using triangulation
-
-P1 = K*[R(:,:,ref),T(:,ref)];
-%P1 = [R(:,:,ref),T(:,ref)];
-p1T1 = P1(1,:);
-p2T1 = P1(2,:);
-p3T1 = P1(3,:);
-P2 = K*[R(:,:,pair),T(:,pair)];
-%P2 = [R(:,:,pair),T(:,pair)];
-p1T2 = P2(1,:);
-p2T2 = P2(2,:);
-p3T2 = P2(3,:);
-
-
-    
     for i = 1:num_Match(ref,pair)
-
         %X1 = inv(K)*[Feature(1:2,Match(ref , i, pair),ref);1];
         %X2 = inv(K)*[Feature(1:2,Match(pair, i, ref), pair);1];
         X1 = [Feature(1:2,Match(ref , i, pair),ref);1];
         X2 = [Feature(1:2,Match(pair, i, ref), pair);1];
         %A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X1(1)*p3T1 - X1(2)*p1T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2; X2(1)*p3T2 - X2(2)*p1T2];
-        A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2];
+        A = [ ...
+            X1(1) * p3T1 - p1T1; ...
+            X1(2) * p3T1 - p2T1; ...
+            X2(1) * p3T2 - p1T2; ...
+            X2(2) * p3T2 - p2T2 ...
+        ];
         [U, O, V] = svd(A);
         Xtmp = V(:,end);
-        q = O(3,3)/O(4,4);
-        Xtmp = Xtmp/sign(Xtmp(4));
-        %Xtmp = Xtmp/Xtmp(4);
+        %Xtmp = Xtmp/sign(Xtmp(4));
+        Xtmp = Xtmp/(Xtmp(4)+eps);
         %Xtmp2 = Xtmp/Xtmp(4);
         %Xtmp = Xtmp/sign(Xtmp(3));
         if (i==1)
@@ -264,15 +255,15 @@ p3T2 = P2(3,:);
 
         x1 = P1*Xtmp;
         x2 = P2*Xtmp;
-        x1 = x1/x1(3);
-        x2 = x2/x2(3);
+        x1 = x1/(x1(3)+eps);
+        x2 = x2/(x2(3)+eps);
 
         X3tmp(pidx,:,i) = Xtmp;
-    if(num_inliers(pidx)>0.1*num_Match(ref,pair))
-        %break;
-    end   
-    end
-    
+        
+        if(num_inliers(pidx)>0.1*num_Match(ref,pair))
+            %break;
+        end   
+    end  
 end
 num_inliers
 [a, pidx]= max(num_inliers);
@@ -284,8 +275,8 @@ P2 = squeeze(P(pidx,:,:));
 R(:, :, pair) = P2(:,1:3);
 T(:, pair) = P2(:,4);
 
-P1 = K*[R(:,:,ref),T(:,ref)];
-P2 = K*[R(:,:,pair),T(:,pair)];
+P1 = K * [R(:,:,ref),T(:,ref)];
+P2 = K*  [R(:,:,pair),T(:,pair)];
 perm = 1:num_Match(ref, pair);
 X1 = [Feature(1:2,Match(ref , perm, pair),ref);ones(1,num_Match(ref,pair))];
 X2 = [Feature(1:2,Match(pair , perm, ref),pair);ones(1,num_Match(ref,pair))];
@@ -293,10 +284,10 @@ x3 = squeeze(X3tmp(pidx,:,perm));
 %x3 = [squeeze(X3tmp(pidx,1:3,perm));meanW* ones(1,num_Match(ref,pair))];
 x1 = P1*x3;
 %x1 = P1*squeeze(X3tmp(pidx,:,perm));
-x1 = x1./x1(3,:);
+x1 = x1./(x1(3,:)+eps);
 x2 = P2*x3;
 %x2 = P2*squeeze(X3tmp(pidx,:,perm));
-x2 = x2./x2(3,:);
+x2 = x2./(x2(3,:)+eps);
 d = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2 + (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
 num_inliers = sum(d<threshold_of_distance);
 
@@ -312,33 +303,33 @@ imgb = imread(sprintf('Data/00%02d.JPG',pair-1));
 [h, w, c] = size(imga);
 idx3d=1;
 
-% figure(1); 
-% subplot(2,1,1)
-% image(imga);
-% hold on;
-% x = X1(1,:); y = X1(2,:);
-% 
-% plot(x,y, 'o');
-% subplot(2,1,2)
-% imshow(imgb);
-% x = X2(1,:); y = X2(2,:);
-% hold on;
-% plot(x,y, 'o');
-% 
-% 
-% fa = round(x1); fb = round(x2);
-% figure(2); 
-% subplot(2,1,1)
-% image(imga);
-% hold on;
-% x = fa(1,:); y = fa(2,:);
-% 
-% plot(x,y, 'o');
-% subplot(2,1,2)
-% imshow(imgb);
-% x = fb(1,:); y = fb(2,:);
-% hold on;
-% plot(x,y, 'o');
+figure(1); 
+subplot(2,1,1)
+image(imga);
+hold on;
+x = X1(1,:); y = X1(2,:);
+
+plot(x,y, 'o');
+subplot(2,1,2)
+imshow(imgb);
+x = X2(1,:); y = X2(2,:);
+hold on;
+plot(x,y, 'o');
+
+
+fa = round(x1); fb = round(x2);
+figure(2); 
+subplot(2,1,1)
+image(imga);
+hold on;
+x = fa(1,:); y = fa(2,:);
+
+plot(x,y, 'o');
+subplot(2,1,2)
+imshow(imgb);
+x = fb(1,:); y = fb(2,:);
+hold on;
+plot(x,y, 'o');
 
 
 for i = 1:num_Match(ref,pair)
@@ -346,8 +337,8 @@ for i = 1:num_Match(ref,pair)
     X2 = [Feature(1:2,Match(pair, i, ref), pair);1];
     %Xtmp = [squeeze(X3tmp(pidx,:,i))'; 1];
     Xtmp = squeeze(X3tmp(pidx,:,i))';
-    x1 = P1*Xtmp;  x1= x1/x1(3);
-    x2 = P2*Xtmp; x2 = x2/x2(3);
+    x1 = P1*Xtmp;  x1= x1/(x1(3)+eps);
+    x2 = P2*Xtmp; x2 = x2/(x2(3)+eps);
     d = (x1(1)-X1(1)).^2 + (x1(2)-X1(2)).^2 + (x2(1)-X2(1)).^2 + (x2(2)-X2(2)).^2;
     if(d<threshold_of_distance)
         xi = round(x2);
@@ -407,10 +398,10 @@ for i=1:1000
             x3 = [X(1:3, idx3);ones(1,length(idx2))];   % P3 에 대해서는 잘 변환함  P2에 대해서는 이상하게 변환
             %x3 = X4(1:4,idx3);     % P2에 대해서는 제대로 변환, P3에 대해서는 다르게 변환
             x1 = P1*x3;
-            x1 = x1./x1(3,:);
+            x1 = x1./(x1(3,:)+eps);
             d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
             x2 = P3*x3;
-            x2 = x2./x2(3,:);
+            x2 = x2./(x2(3,:)+eps);
             %x2 = P2*x3;
             %x2 = x2./x2(3,:);
             d2 = (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
@@ -454,13 +445,14 @@ for i =1:length(old2d)
     [U, O, V] = svd(A);
     Xtmp = V(:,end);
     %Xtmp = Xtmp/sign(Xtmp(3));
-    Xtmp = Xtmp/sign(Xtmp(4));
+    %Xtmp = Xtmp/sign(Xtmp(4));
+    Xtmp = Xtmp/(Xtmp(4)+eps);
     
     x1 = P1*Xtmp;
-    x1 = x1./x1(3,:);
+    x1 = x1./(x1(3,:)+eps);
     d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
     x2 = P3*Xtmp;
-    x2 = x2./x2(3,:);
+    x2 = x2./(x2(3,:)+eps);
     Xori = X4(1:4,idx3(i));
     ratio(:,i) = Xori./Xtmp;
 end
@@ -496,6 +488,7 @@ for picture = 3 : number_of_pictures
         idx= idx+1;
     end
     new = I(idx);
+    new = picture;
     Image_selected(new)=1;
 
     new; % find out
@@ -503,9 +496,11 @@ for picture = 3 : number_of_pictures
     % Find the 2D-to-3D correspondences between features of 'new' and features of 'old's.
     olds = [];
     [B, I] = sort(num_Match(old,new),'descend');
-    for kidx = 1:length(I)
+    %for kidx = 1:length(I)
+    for idx = 1:length(I)
+        %idx = I(kidx);
         distance = zeros(2,num_Match(old(idx),new));
-        idx = I(kidx);
+        
         old2d = Match(old(idx), 1:num_Match(old(idx),new), new);
         Xtmp = Feature2X(old(idx),old2d);
         old2d = old2d.*(Xtmp>0); old2d = old2d(find(old2d));
@@ -548,10 +543,10 @@ for picture = 3 : number_of_pictures
                     x3 = [X(1:3, idx3);ones(1,length(idx2))];
                     %x3 = X4(1:4,idx3);
                     x1 = P1*x3;
-                    x1 = x1./x1(3,:);
+                    x1 = x1./(x1(3,:)+eps);
                     d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
                     x2 = P2*x3;
-                    x2 = x2./x2(3,:);
+                    x2 = x2./(x2(3,:)+eps);
                     d2 = (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
                     if(sum(d2<threshold_of_distance) > num_inliers)
                         RTret = RT(1+4*(k-1):3+4*(k-1),:);
@@ -573,24 +568,24 @@ for picture = 3 : number_of_pictures
         p2T2 = P2(2,:);
         p3T2 = P2(3,:);
         
-%         X1 = [Feature(1:2,old2d ,old(idx));ones(1, length(old2d))];
-%         X2 = [Feature(1:2,new2d ,new);ones(1,length(new2d))];
-%         imga = imread(sprintf('Data/00%02d.JPG',old(idx)-1));
-%         imgb = imread(sprintf('Data/00%02d.JPG',new-1));
-%         [h, w, c] = size(imga);
-% 
-%         figure(1); 
-%         subplot(2,1,1)
-%         image(imga);
-%         hold on;
-%         x = X1(1,:); y = X1(2,:);
-% 
-%         plot(x,y, 'o');
-%         subplot(2,1,2)
-%         imshow(imgb);
-%         x = X2(1,:); y = X2(2,:);
-%         hold on;
-%         plot(x,y, 'o');
+        X1 = [Feature(1:2,old2d ,old(idx));ones(1, length(old2d))];
+        X2 = [Feature(1:2,new2d ,new);ones(1,length(new2d))];
+        imga = imread(sprintf('Data/00%02d.JPG',old(idx)-1));
+        imgb = imread(sprintf('Data/00%02d.JPG',new-1));
+        [h, w, c] = size(imga);
+
+        figure(1); 
+        subplot(2,1,1)
+        image(imga);
+        hold on;
+        x = X1(1,:); y = X1(2,:);
+
+        plot(x,y, 'o');
+        subplot(2,1,2)
+        imshow(imgb);
+        x = X2(1,:); y = X2(2,:);
+        hold on;
+        plot(x,y, 'o');
 
         
         % K nearest neighbor
@@ -618,7 +613,8 @@ for picture = 3 : number_of_pictures
             [U, O, V] = svd(A);
             Xtmp = V(:,end);
             %Xtmp = Xtmp/sign(Xtmp(3));
-            Xtmp = Xtmp/sign(Xtmp(4));
+            %Xtmp = Xtmp/sign(Xtmp(4));
+            Xtmp = Xtmp/(Xtmp(4)+eps);
             Xori = X4(1:4,idx3(i));
             ratio(:,i) = Xori./Xtmp;
         end
@@ -654,8 +650,8 @@ for picture = 3 : number_of_pictures
             %Xtmp = Xtmp/sign(Xtmp(3));
             %Xtmp = ratio(nearest).*Xtmp;
             %Xtmp = Xtmp*mean(median(ratio(1:3),2));
-            %Xtmp = Xtmp/Xtmp(4);
-            Xtmp = Xtmp/sign(Xtmp(4));
+            Xtmp = Xtmp/(Xtmp(4) + eps);
+            %Xtmp = Xtmp/sign(Xtmp(4));
             Xcam1 = [[R(:,:,old(idx)),T(:,old(idx))];0 0 0 1]*Xtmp;
             Xcam2 = [[R(:,:,new),T(:,new)];0 0 0 1]*Xtmp;
             
@@ -663,8 +659,8 @@ for picture = 3 : number_of_pictures
             
             x1 = P1*Xtmp;
             x2 = P2*Xtmp;
-            x1 = x1./x1(3);
-            x2 = x2./x2(3);
+            x1 = x1./(x1(3)+eps);
+            x2 = x2./(x2(3)+eps);
             d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
             d2 = (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
             distance(1,i) = d1;
