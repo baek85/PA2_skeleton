@@ -1,0 +1,10 @@
+*.mat
+*.mexw64
+
+*.ply
+*.jpg
+*.JPG
+*.png
+
+*.asv
+*.swp
