@@ -26,7 +26,8 @@ number_of_iterations_for_LM         = 0;
 threshold_of_distance = 1; 
 
 % Assumptions ( need to be set )
-max_number_of_features  = 1500; % maximum number of features in 1 image
+%% 0.3 = 1699 0 = 3270
+max_number_of_features  = 3270; % maximum number of features in 1 image
 max_number_of_points    = 50000; % maximum number of reconstructed points
 
 % Matrices
@@ -76,7 +77,7 @@ list = dir(data_dir);
 %     list = dir(data_dir);
 %     path = fullfile(data_dir, list(idx+2).name);
 %     tmp = imread(path); tmp = single(rgb2gray(tmp));
-%     [f, d] = vl_sift(tmp,'PeakThresh', 0.3, 'EdgeThresh', 10);
+%     [f, d] = vl_sift(tmp,'PeakThresh', 0, 'EdgeThresh', 10);
 %     num_Feature(idx) = size(f,2);
 %     perm = randperm(size(f,2));
 %     sel = perm(1:max_number_of_features);
@@ -96,13 +97,13 @@ list = dir(data_dir);
 %         
 %     end
 % end
-%save 0.3.mat
-load 0.3.mat
+%save 0.mat
+load 0.mat
 
-X4               = zeros(7, max_number_of_points); 
+
 number_of_pictures                  = 32;     % number of input pictures
 number_of_iterations_for_5_point    = 1000;
-number_of_iterations_for_3_point    = 1000;
+number_of_iterations_for_3_point    = 10000;
 number_of_iterations_for_LM         = 0;
 
 % Thresholds ( need to be set )
@@ -293,29 +294,15 @@ imgb = imread(path);
 [h, w, c] = size(imga);
 idx3d=1;
 
-% figure(1); 
-% subplot(2,1,1)
-% image(imga);
-% hold on;
-% x = X1(1,:); y = X1(2,:);
-% 
-% plot(x,y, 'o');
-% subplot(2,1,2)
-% imshow(imgb);
-% x = X2(1,:); y = X2(2,:);
-% hold on;
-% plot(x,y, 'o');
-% 
-% 
 % fa = round(x1); fb = round(x2);
-% figure(2); 
-% subplot(2,1,1)
-% image(imga);
-% hold on;
-% x = fa(1,:); y = fa(2,:);
-% 
-% plot(x,y, 'o');
-% subplot(2,1,2)
+% figure(1); 
+% % subplot(2,1,1)
+% % image(imga);
+% % hold on;
+% % x = fa(1,:); y = fa(2,:);
+% % 
+% % plot(x,y, 'o');
+% % subplot(2,1,2)
 % imshow(imgb);
 % x = fb(1,:); y = fb(2,:);
 % hold on;
@@ -410,9 +397,11 @@ p3T2 = P3(3,:);
         
 Cam1 = mean(Cam1,2);
 Cam2 = mean(Cam2,2);
-X(:,idx3d+1) = [Cam1;[1, 0, 0]']; X_exist(idx3d+1)=1;
-X(:,idx3d+2) = [Cam2;[1, 0, 0]']; X_exist(idx3d+2)=1;
-idx3d = idx3d+3;
+X(:,idx3d) = [[0.000, 0.000, 0.000]';[1, 0, 0]']; X_exist(idx3d)=1;
+idx3d = idx3d+1;
+X(:,idx3d) = [Cam2;[1, 0, 0]']; X_exist(idx3d)=1;
+idx3d = idx3d+1;
+
 %X(:,idx3d+3:end) = zeros(size(X(:,idx3d+3:end)));
 X; % find out
 X_exist; % find out
@@ -460,7 +449,7 @@ for picture = 3 : number_of_pictures
         % Estimate pose R|T using 6-point DLT or 3-point algorithm.
         idx2 = new2d;
         idx3 = Feature2X(new,new2d);
-        number_of_iterations_for_3_point    = 50000;
+        
         num_inliers = 0;
         for i=1:number_of_iterations_for_3_point
             perm = randperm(length(idx2));
@@ -513,6 +502,20 @@ for picture = 3 : number_of_pictures
         imgb = imread(path);
         [h, w, c] = size(imga);
 
+%         figure(picture-1); 
+% %         subplot(2,1,1)
+% %         image(imga);
+% %         hold on;
+% %         x = X1(1,:); y = X1(2,:);
+% % 
+% %         plot(x,y, 'o');
+% %         subplot(2,1,2)
+%         if(kidx==1)
+%             imshow(imgb);
+%         end
+%         x = X2(1,:); y = X2(2,:);
+%         hold on;
+%         plot(x,y, 'o');
 
         % Reconstruct 3D points using triangulation
         
@@ -523,26 +526,18 @@ for picture = 3 : number_of_pictures
             X1 = [Feature(1:2,Match(old(idx) , i, new),old(idx));1];
             X2 = [Feature(1:2,Match(new, i, old(idx)), new);1];
             
-            for k =1:length(old2d)
-                X22 = [Feature(1:2,new2d(k), new);1];
-                d2 = (X2(1)-X22(1)).^2 + (X2(2)-X22(2)).^2;
-                if(k==1)
-                    nearest = 1;
-                    least_d = d2;
-                end
-                if(d2<least_d)
-                    nearest = k;
-                    least_d = d2;
-                end
-            end
-            %A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X1(1)*p3T1 - X1(2)*p1T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2; X2(1)*p3T2 - X2(2)*p1T2];
-            A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2];
+            A = [...
+                X1(1)*p3T1 - p1T1;...
+                X1(2)*p3T1 - p2T1;...
+                X2(1)*p3T2 - p1T2;...
+                X2(2)*p3T2 - p2T2];
             [U, O, V] = svd(A);
             Xtmp = V(:,end);
             Xtmp = Xtmp/(Xtmp(4) + eps);
             Xcam1 = [[R(:,:,old(idx)),T(:,old(idx))];0 0 0 1]*Xtmp;
             Xcam2 = [[R(:,:,new),T(:,new)];0 0 0 1]*Xtmp;
             
+            Cam1(:,i) = Xtmp(1:3) - Xcam1(1:3);
             Cam2(:,i) = Xtmp(1:3) - Xcam2(1:3);
             
             x1 = P1*Xtmp;
@@ -567,11 +562,14 @@ for picture = 3 : number_of_pictures
             end  
             
         end
-    end
     if(kidx ==1)
-        X(:,idx3d) = [mean(Cam2,2);[1, 0, 0]']; X_exist(idx3d)=1;
+        Cam1 = mean(Cam1,2);
+        Cam2 = mean(Cam2,2);
+        X(:,idx3d) = [Cam2;[1, 0, 0]']; X_exist(idx3d)=1;
         idx3d = idx3d+1;
     end
+    end
+    
     % Optimize all R|T and all 3D points
     
     % Reduce duplicate points
