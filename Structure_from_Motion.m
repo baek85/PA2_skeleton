@@ -11,10 +11,13 @@ close all;
 clear all;
 
 addpath('Givenfunctions');
+addpath(genpath('vlfeat-0.9.21'))
 data_dir='Data';
+%data_dir = 'Data2';
 %% Define constants and parameters
 % Constants ( need to be set )
 number_of_pictures                  = 32;     % number of input pictures
+%number_of_pictures = 39;
 number_of_iterations_for_5_point    = 1000;
 number_of_iterations_for_3_point    = 0;
 number_of_iterations_for_LM         = 0;
@@ -23,14 +26,16 @@ number_of_iterations_for_LM         = 0;
 threshold_of_distance = 1; 
 
 % Assumptions ( need to be set )
-max_number_of_features  = 1300; % maximum number of features in 1 image
+max_number_of_features  = 1500; % maximum number of features in 1 image
 max_number_of_points    = 50000; % maximum number of reconstructed points
 
 % Matrices
 K               = [ 1698.873755 0.000000     971.7497705;
                     0.000000    1698.8796645 647.7488275;
                     0.000000    0.000000     1.000000 ];
-                                             
+% K               = [ 14694.18649 0.000000  2669.15048;
+%                     0.000000    8083.86985   2084.23391;
+%                     0.000000    0.000000     1.000000 ];
                 % = intrinsic parameter matrix. 3 x 3
 num_Feature     = zeros(1, number_of_pictures);                         
                 % = number of features in each images. 1 x (# picture)
@@ -59,6 +64,7 @@ T               = zeros(3, number_of_pictures);
 eps = 0;
 % ADVICE : These matrices seem very difficult, but you will need sum data structures like them.
 
+list = dir(data_dir);
 
 %% Feature extraction and matching
 % Load images and extract features and find correspondences.
@@ -66,32 +72,32 @@ eps = 0;
 % hints : use vl_sift to extract features and get the descriptors.
 %        use vl_ubcmatch to find corresponding matches between two feature sets.
 % 
-% for idx=1:number_of_pictures
-%     list = dir(data_dir);
-%     path = fullfile(data_dir, list(idx+2).name);
-%     tmp = imread(path); tmp = single(rgb2gray(tmp));
-%     [f, d] = vl_sift(tmp,'PeakThresh', 0.5, 'EdgeThresh', 10);
-%     num_Feature(idx) = size(f,2);
-%     perm = randperm(size(f,2));
-%     sel = perm(1:max_number_of_features);
-%     Feature(:,1:max_number_of_features, idx) = f(:, sel);
-%     Descriptor(:,1:max_number_of_features, idx) = d(:,sel);
-% 
-% end
-% len = zeros(number_of_pictures);
-% 
-% for a=1:number_of_pictures-1
-%     for b=a+1:number_of_pictures
-%         [matches, scores] = vl_ubcmatch(Descriptor(:,:,a), Descriptor(:,:,b));
-%         num_Match(a,b) = size(matches,2);
-%         num_Match(b,a) = size(matches,2);
-%         Match(a,1:size(matches,2),b) = matches(1,:);
-%         Match(b,1:size(matches,2),a) = matches(2,:);
-%         
-%     end
-% end
-%save 0.5.mat
-load 1.mat
+for idx=1:number_of_pictures
+    list = dir(data_dir);
+    path = fullfile(data_dir, list(idx+2).name);
+    tmp = imread(path); tmp = single(rgb2gray(tmp));
+    [f, d] = vl_sift(tmp,'PeakThresh', 0.3, 'EdgeThresh', 10);
+    num_Feature(idx) = size(f,2);
+    perm = randperm(size(f,2));
+    sel = perm(1:max_number_of_features);
+    Feature(:,1:max_number_of_features, idx) = f(:, sel);
+    Descriptor(:,1:max_number_of_features, idx) = d(:,sel);
+
+end
+len = zeros(number_of_pictures);
+
+for a=1:number_of_pictures-1
+    for b=a+1:number_of_pictures
+        [matches, scores] = vl_ubcmatch(Descriptor(:,:,a), Descriptor(:,:,b));
+        num_Match(a,b) = size(matches,2);
+        num_Match(b,a) = size(matches,2);
+        Match(a,1:size(matches,2),b) = matches(1,:);
+        Match(b,1:size(matches,2),a) = matches(2,:);
+        
+    end
+end
+save 0.3.mat
+%load 1.mat
 
 X4               = zeros(7, max_number_of_points); 
 number_of_pictures                  = 32;     % number of input pictures
@@ -115,7 +121,7 @@ ref; % find out
 [M, pair] = max(num_Match(ref,:));
 pair; % find out
 
-ref = 1; pair = 2;
+%ref = 1; pair = 2;
 Image_selected(ref)=1;
 Image_selected(pair)=1;
 
@@ -178,7 +184,8 @@ E = Eret;
 
 % Decompose E into [Rp, Tp]
 
-[U, S, V] = svd(sqrt(2)*E);
+%[U, S, V] = svd(sqrt(2)*E);
+[U, S, V] = svd(E);
 %U = U * S(1,1);
 %V = V*S(1,1);
 W = [0 -1 0; 1 0 0; 0 0 1];  u3 = U * [0,0,1]';
@@ -298,38 +305,40 @@ P1 = K*[R(:,:,ref),T(:,ref)];
 P2 = K*RTret(1:3,:);
 Cam1 = zeros(3,num_Match(ref,pair));
 Cam2 = zeros(3,num_Match(ref,pair));
-imga = imread(sprintf('Data/00%02d.JPG',ref-1));
-imgb = imread(sprintf('Data/00%02d.JPG',pair-1));
+path = fullfile(data_dir, list(ref+2).name);
+imga = imread(path);
+path = fullfile(data_dir, list(pair+2).name);
+imgb = imread(path);
 [h, w, c] = size(imga);
 idx3d=1;
 
-figure(1); 
-subplot(2,1,1)
-image(imga);
-hold on;
-x = X1(1,:); y = X1(2,:);
-
-plot(x,y, 'o');
-subplot(2,1,2)
-imshow(imgb);
-x = X2(1,:); y = X2(2,:);
-hold on;
-plot(x,y, 'o');
-
-
-fa = round(x1); fb = round(x2);
-figure(2); 
-subplot(2,1,1)
-image(imga);
-hold on;
-x = fa(1,:); y = fa(2,:);
-
-plot(x,y, 'o');
-subplot(2,1,2)
-imshow(imgb);
-x = fb(1,:); y = fb(2,:);
-hold on;
-plot(x,y, 'o');
+% figure(1); 
+% subplot(2,1,1)
+% image(imga);
+% hold on;
+% x = X1(1,:); y = X1(2,:);
+% 
+% plot(x,y, 'o');
+% subplot(2,1,2)
+% imshow(imgb);
+% x = X2(1,:); y = X2(2,:);
+% hold on;
+% plot(x,y, 'o');
+% 
+% 
+% fa = round(x1); fb = round(x2);
+% figure(2); 
+% subplot(2,1,1)
+% image(imga);
+% hold on;
+% x = fa(1,:); y = fa(2,:);
+% 
+% plot(x,y, 'o');
+% subplot(2,1,2)
+% imshow(imgb);
+% x = fb(1,:); y = fb(2,:);
+% hold on;
+% plot(x,y, 'o');
 
 
 for i = 1:num_Match(ref,pair)
@@ -478,7 +487,7 @@ figure(1); scatter3(X(1,1:idx3d), X(2,1:idx3d), X(3,1:idx3d),50,X(4:6,1:idx3d)')
 % If you have done the initialization step, then do this step.
 
 for picture = 3 : number_of_pictures
-    
+     
     old=find(Image_selected==1); % previously selected timages
     
     % Find the best image that has the largest sum of # correspondences to previously selected images. 
@@ -488,7 +497,7 @@ for picture = 3 : number_of_pictures
         idx= idx+1;
     end
     new = I(idx);
-    new = picture;
+    %new = picture;
     Image_selected(new)=1;
 
     new; % find out
@@ -496,9 +505,9 @@ for picture = 3 : number_of_pictures
     % Find the 2D-to-3D correspondences between features of 'new' and features of 'old's.
     olds = [];
     [B, I] = sort(num_Match(old,new),'descend');
-    %for kidx = 1:length(I)
-    for idx = 1:length(I)
-        %idx = I(kidx);
+    for kidx = 1:length(I)
+    %for idx = 1:length(I)
+        idx = I(kidx);
         distance = zeros(2,num_Match(old(idx),new));
         
         old2d = Match(old(idx), 1:num_Match(old(idx),new), new);
@@ -514,7 +523,6 @@ for picture = 3 : number_of_pictures
         idx3 = Feature2X(new,new2d);
         number_of_iterations_for_3_point    = 50000;
         num_inliers = 0;
-        threshold_of_distance = 10;
         for i=1:number_of_iterations_for_3_point
             perm = randperm(length(idx2));
             perm = perm(1:3);
@@ -570,22 +578,24 @@ for picture = 3 : number_of_pictures
         
         X1 = [Feature(1:2,old2d ,old(idx));ones(1, length(old2d))];
         X2 = [Feature(1:2,new2d ,new);ones(1,length(new2d))];
-        imga = imread(sprintf('Data/00%02d.JPG',old(idx)-1));
-        imgb = imread(sprintf('Data/00%02d.JPG',new-1));
+        path = fullfile(data_dir, list(old(idx)).name);
+        imga = imread(path);
+        path = fullfile(data_dir, list(new+2).name);
+        imgb = imread(path);
         [h, w, c] = size(imga);
 
-        figure(1); 
-        subplot(2,1,1)
-        image(imga);
-        hold on;
-        x = X1(1,:); y = X1(2,:);
-
-        plot(x,y, 'o');
-        subplot(2,1,2)
-        imshow(imgb);
-        x = X2(1,:); y = X2(2,:);
-        hold on;
-        plot(x,y, 'o');
+%         figure(1); 
+%         subplot(2,1,1)
+%         image(imga);
+%         hold on;
+%         x = X1(1,:); y = X1(2,:);
+% 
+%         plot(x,y, 'o');
+%         subplot(2,1,2)
+%         imshow(imgb);
+%         x = X2(1,:); y = X2(2,:);
+%         hold on;
+%         plot(x,y, 'o');
 
         
         % K nearest neighbor
@@ -685,12 +695,13 @@ for picture = 3 : number_of_pictures
             end  
             
         end
-        %X(:,idx3d) = [mean(Cam2,2);[1, 0, 0]']; X_exist(idx3d)=1;
-        %idx3d = idx3d+1;
+        
     end
     % Optimize all R|T and all 3D points
-    
-    
+    if(kidx ==1)
+        X(:,idx3d) = [mean(Cam2,2);[1, 0, 0]']; X_exist(idx3d)=1;
+        idx3d = idx3d+1;
+    end
     % Reduce duplicate points
     
     

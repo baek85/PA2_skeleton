@@ -1,13 +1,21 @@
 clear all;
 close all;
 
-imga = imread('Data/0031.jpg');
-imgb = imread('Data/0001.jpg');
+
+addpath(genpath('vlfeat-0.9.21'))
+data_dir = 'Data2';
+
+data_dir = 'Data';
+list = dir(data_dir);
+path = fullfile(data_dir, list(1+2).name);
+imga = imread(path);
+path = fullfile(data_dir, list(2+2).name);
+imgb = imread(path);
 
 la = single(rgb2gray(imga));
 lb = single(rgb2gray(imgb));
 [fa, da] = vl_sift(la, 'PeakThresh', 0.5, 'EdgeThresh', 10);
-[fb, db] = vl_sift(lb, 'PeakThresh', 0.5, 'EdgeThresh', 10, 'Levels', 3);
+[fb, db] = vl_sift(la, 'PeakThresh', 0.5, 'EdgeThresh',5 , 'Levels', 3);
 
 %perm = randperm(size(fa,2));
 %sel = perm(1:50);
