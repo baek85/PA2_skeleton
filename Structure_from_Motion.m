@@ -72,32 +72,32 @@ list = dir(data_dir);
 % hints : use vl_sift to extract features and get the descriptors.
 %        use vl_ubcmatch to find corresponding matches between two feature sets.
 % 
-for idx=1:number_of_pictures
-    list = dir(data_dir);
-    path = fullfile(data_dir, list(idx+2).name);
-    tmp = imread(path); tmp = single(rgb2gray(tmp));
-    [f, d] = vl_sift(tmp,'PeakThresh', 0.3, 'EdgeThresh', 10);
-    num_Feature(idx) = size(f,2);
-    perm = randperm(size(f,2));
-    sel = perm(1:max_number_of_features);
-    Feature(:,1:max_number_of_features, idx) = f(:, sel);
-    Descriptor(:,1:max_number_of_features, idx) = d(:,sel);
-
-end
-len = zeros(number_of_pictures);
-
-for a=1:number_of_pictures-1
-    for b=a+1:number_of_pictures
-        [matches, scores] = vl_ubcmatch(Descriptor(:,:,a), Descriptor(:,:,b));
-        num_Match(a,b) = size(matches,2);
-        num_Match(b,a) = size(matches,2);
-        Match(a,1:size(matches,2),b) = matches(1,:);
-        Match(b,1:size(matches,2),a) = matches(2,:);
-        
-    end
-end
-save 0.3.mat
-%load 1.mat
+% for idx=1:number_of_pictures
+%     list = dir(data_dir);
+%     path = fullfile(data_dir, list(idx+2).name);
+%     tmp = imread(path); tmp = single(rgb2gray(tmp));
+%     [f, d] = vl_sift(tmp,'PeakThresh', 0.3, 'EdgeThresh', 10);
+%     num_Feature(idx) = size(f,2);
+%     perm = randperm(size(f,2));
+%     sel = perm(1:max_number_of_features);
+%     Feature(:,1:max_number_of_features, idx) = f(:, sel);
+%     Descriptor(:,1:max_number_of_features, idx) = d(:,sel);
+% 
+% end
+% len = zeros(number_of_pictures);
+% 
+% for a=1:number_of_pictures-1
+%     for b=a+1:number_of_pictures
+%         [matches, scores] = vl_ubcmatch(Descriptor(:,:,a), Descriptor(:,:,b));
+%         num_Match(a,b) = size(matches,2);
+%         num_Match(b,a) = size(matches,2);
+%         Match(a,1:size(matches,2),b) = matches(1,:);
+%         Match(b,1:size(matches,2),a) = matches(2,:);
+%         
+%     end
+% end
+%save 0.3.mat
+load 0.3.mat
 
 X4               = zeros(7, max_number_of_points); 
 number_of_pictures                  = 32;     % number of input pictures
@@ -197,10 +197,8 @@ P(2,:,:) = [U * W * V', -u3];
 P(3,:,:) = [U * W' * V', u3];
 P(4,:,:) = [U * W' * V', -u3];
 
-%num_outliers = zeros(4,1);
 num_inliers = zeros(4,1);
 X3tmp = zeros(4, 4, num_Match(ref,pair));
-WW = zeros(4,num_Match(ref,pair)); 
 
 %% Ppair1 , Ppair4  -> (depth >0)
 for pidx = 1:4
@@ -216,7 +214,6 @@ for pidx = 1:4
 
     % Reconstruct 3D points using triangulation
     P1 = K * [R(:,:,ref), T(:,ref)];
-    %P1 = [R(:,:,ref),T(:,ref)];
     p1T1 = P1(1,:);
     p2T1 = P1(2,:);
     p3T1 = P1(3,:);
@@ -226,11 +223,8 @@ for pidx = 1:4
     p3T2 = P2(3,:);
 
     for i = 1:num_Match(ref,pair)
-        %X1 = inv(K)*[Feature(1:2,Match(ref , i, pair),ref);1];
-        %X2 = inv(K)*[Feature(1:2,Match(pair, i, ref), pair);1];
         X1 = [Feature(1:2,Match(ref , i, pair),ref);1];
         X2 = [Feature(1:2,Match(pair, i, ref), pair);1];
-        %A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X1(1)*p3T1 - X1(2)*p1T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2; X2(1)*p3T2 - X2(2)*p1T2];
         A = [ ...
             X1(1) * p3T1 - p1T1; ...
             X1(2) * p3T1 - p2T1; ...
@@ -239,15 +233,8 @@ for pidx = 1:4
         ];
         [U, O, V] = svd(A);
         Xtmp = V(:,end);
-        %Xtmp = Xtmp/sign(Xtmp(4));
         Xtmp = Xtmp/(Xtmp(4)+eps);
-        %Xtmp2 = Xtmp/Xtmp(4);
-        %Xtmp = Xtmp/sign(Xtmp(3));
-        if (i==1)
-            www = Xtmp(4);
-        end
-        %Xtmp = Xtmp/Xtmp(4)*www;
-        WW(pidx, i) = Xtmp(4);
+        
         Xcam1 = [[R(:,:,ref),T(:,ref)];0 0 0 1]*Xtmp;
         Xcam2 = [[R(:,:,pair),T(:,pair)];0 0 0 1]*Xtmp;
 
@@ -267,17 +254,14 @@ for pidx = 1:4
 
         X3tmp(pidx,:,i) = Xtmp;
         
-        if(num_inliers(pidx)>0.1*num_Match(ref,pair))
-            %break;
-        end   
+%         if(num_inliers(pidx)>0.1*num_Match(ref,pair))
+%             break;
+%         end   
     end  
 end
 num_inliers
 [a, pidx]= max(num_inliers);
 
-%X3tmp(pidx,:,:) = X3tmp(pidx,:,:)./X3tmp(pidx,4,:);
-%meanW = median(WW(pidx,:));
-%X3tmp(pidx,:,:) = meanW * X3tmp(pidx,:,:);
 P2 = squeeze(P(pidx,:,:));
 R(:, :, pair) = P2(:,1:3);
 T(:, pair) = P2(:,4);
@@ -288,12 +272,9 @@ perm = 1:num_Match(ref, pair);
 X1 = [Feature(1:2,Match(ref , perm, pair),ref);ones(1,num_Match(ref,pair))];
 X2 = [Feature(1:2,Match(pair , perm, ref),pair);ones(1,num_Match(ref,pair))];
 x3 = squeeze(X3tmp(pidx,:,perm));
-%x3 = [squeeze(X3tmp(pidx,1:3,perm));meanW* ones(1,num_Match(ref,pair))];
 x1 = P1*x3;
-%x1 = P1*squeeze(X3tmp(pidx,:,perm));
 x1 = x1./(x1(3,:)+eps);
 x2 = P2*x3;
-%x2 = P2*squeeze(X3tmp(pidx,:,perm));
 x2 = x2./(x2(3,:)+eps);
 d = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2 + (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
 num_inliers = sum(d<threshold_of_distance);
@@ -357,12 +338,11 @@ for i = 1:num_Match(ref,pair)
         x2 = round(x2);
         x = max(min(x2(2),w), 1);
         y = max(min(x2(1),h), 1);
-        
-        X4(1:4,idx3d) = Xtmp(1:4);
-        X4(5:7,idx3d) = double(imga(x, y,:))/255;
+
         X(1:3,idx3d)= Xtmp(1:3);
         X(4:6,idx3d) = double(imga(x, y,:))/255;
         X_exist(idx3d) = 1;
+        
         Feature2X(ref, Match(ref,i,pair)) = idx3d;
         Feature2X(pair, Match(pair, i, ref)) = idx3d;
         
@@ -394,8 +374,8 @@ num_inliers = 0;
 for i=1:1000
     perm = randperm(length(idx2));
     perm = perm(1:3);
-    nx = inv(K)*[Feature(1:2,idx2(perm),pair); ones(1,3)];
-    x3 = X4(1:3,idx3(perm))';
+    nx = K \ [Feature(1:2,idx2(perm),pair); ones(1,3)];
+    x3 = X(1:3,idx3(perm))';
     data = [nx',x3];
     RT=PerspectiveThreePoint(data);
     if(RT ~= -1)
@@ -405,18 +385,15 @@ for i=1:1000
             X1 = [Feature(1:2,old2d, ref); ones(1,length(idx2))];
             X2 = [Feature(1:2,idx2, pair); ones(1,length(idx2))];
             x3 = [X(1:3, idx3);ones(1,length(idx2))];   % P3 에 대해서는 잘 변환함  P2에 대해서는 이상하게 변환
-            %x3 = X4(1:4,idx3);     % P2에 대해서는 제대로 변환, P3에 대해서는 다르게 변환
             x1 = P1*x3;
             x1 = x1./(x1(3,:)+eps);
             d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
             x2 = P3*x3;
             x2 = x2./(x2(3,:)+eps);
-            %x2 = P2*x3;
-            %x2 = x2./x2(3,:);
             d2 = (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
-            if(sum(d2<threshold_of_distance) > num_inliers)
+            if(sum(d1+d2<threshold_of_distance) > num_inliers)
                 RTret = RT(1+4*(k-1):3+4*(k-1),:);
-                num_inliers = sum(d2<threshold_of_distance);
+                num_inliers = sum(d1+d2<threshold_of_distance);
                 fprintf('3-point algorithm iters = %d    number of inliers = %d / %d\n', i, num_inliers, length(idx2));
             end
         end
@@ -430,41 +407,6 @@ p3T1 = P1(3,:);
 p1T2 = P3(1,:);
 p2T2 = P3(2,:);
 p3T2 = P3(3,:);
-
-ratio = zeros(4,length(old2d));
-nearest = zeros(1, length(old2d));
-least_d = zeros(1, length(old2d));
-
-for i =1:length(old2d)
-    X1 = [Feature(1:2,old2d(i),ref);1];
-    X2 = [Feature(1:2,new2d(i), pair);1];
-%     for k =1:length(old2d)
-%         X22 = [Feature(1:2,new2d(k), pair);1];
-%         d = (X2(1)-X22(1)).^2 + (X2(2)-X22(2)).^2;
-%         if(k==1 && d>0)
-%             nearest(i) = 1;
-%             least_d(i) = d;
-%         elseif((d<least_d(i) && d>0) || least_d(i) ==0)
-%             nearest(i) = k;
-%             least_d(i) = d;
-%         end
-%     end
-    %A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X1(1)*p3T1 - X1(2)*p1T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2; X2(1)*p3T2 - X2(2)*p1T2];
-    A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2];
-    [U, O, V] = svd(A);
-    Xtmp = V(:,end);
-    %Xtmp = Xtmp/sign(Xtmp(3));
-    %Xtmp = Xtmp/sign(Xtmp(4));
-    Xtmp = Xtmp/(Xtmp(4)+eps);
-    
-    x1 = P1*Xtmp;
-    x1 = x1./(x1(3,:)+eps);
-    d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
-    x2 = P3*Xtmp;
-    x2 = x2./(x2(3,:)+eps);
-    Xori = X4(1:4,idx3(i));
-    ratio(:,i) = Xori./Xtmp;
-end
         
 Cam1 = mean(Cam1,2);
 Cam2 = mean(Cam2,2);
@@ -478,11 +420,8 @@ X_exist; % find out
 
 % Save 3D points to PLY
 filename = sprintf('02_%02d_%02dviews.ply', ref, pair);
-%SavePLY(filename, X, X_exist);
-%X(1:3,:)= X4(1:3,:);
-%X(4:6,:) = X4(5:7,:);
 SavePLY(filename, X);
-figure(1); scatter3(X(1,1:idx3d), X(2,1:idx3d), X(3,1:idx3d),50,X(4:6,1:idx3d)');
+%figure(1); scatter3(X(1,1:idx3d), X(2,1:idx3d), X(3,1:idx3d),50,X(4:6,1:idx3d)');
 %% Growing step ( for more than 2 views )
 % If you have done the initialization step, then do this step.
 
@@ -528,8 +467,8 @@ for picture = 3 : number_of_pictures
             perm = perm(1:3);
             old_x = old2d(perm);
             new_x =  new2d(perm);
-            nx = inv(K)*[Feature(1:2,new_x,new); ones(1,3)];
-            x3 = X4(1:3,idx3(perm))';
+            nx = K \ [Feature(1:2,new_x,new); ones(1,3)];
+            x3 = X(1:3, idx3(perm))';
             data = [nx',x3];
             RT=PerspectiveThreePoint(data);
             if(RT ~= -1)
@@ -538,18 +477,8 @@ for picture = 3 : number_of_pictures
                 for k = 1:size(RT,1)/4
                     P2 = K*RT(1+4*(k-1):3+4*(k-1),:);
                     X1 = [Feature(1:2,old2d, old(idx)); ones(1,length(idx2))];
-                    X2 = [Feature(1:2,new_x,new); ones(1,3)];
-                    x3 = [X(1:3, idx3(perm));ones(1,3)];
-                    %x3 = X4(1:4,idx3(perm));
-                    x2 = P2*x3;
-                    x2 = x2./x2(3,:);
-                    d2 = (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
-                    if(sum(d2)< 3)
-                        x2;
-                    end
                     X2 = [Feature(1:2,idx2,new); ones(1,length(idx2))];
                     x3 = [X(1:3, idx3);ones(1,length(idx2))];
-                    %x3 = X4(1:4,idx3);
                     x1 = P1*x3;
                     x1 = x1./(x1(3,:)+eps);
                     d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
@@ -578,61 +507,15 @@ for picture = 3 : number_of_pictures
         
         X1 = [Feature(1:2,old2d ,old(idx));ones(1, length(old2d))];
         X2 = [Feature(1:2,new2d ,new);ones(1,length(new2d))];
-        path = fullfile(data_dir, list(old(idx)).name);
+        path = fullfile(data_dir, list(old(idx)+2).name);
         imga = imread(path);
         path = fullfile(data_dir, list(new+2).name);
         imgb = imread(path);
         [h, w, c] = size(imga);
 
-%         figure(1); 
-%         subplot(2,1,1)
-%         image(imga);
-%         hold on;
-%         x = X1(1,:); y = X1(2,:);
-% 
-%         plot(x,y, 'o');
-%         subplot(2,1,2)
-%         imshow(imgb);
-%         x = X2(1,:); y = X2(2,:);
-%         hold on;
-%         plot(x,y, 'o');
 
-        
-        % K nearest neighbor
-
-        ratio = zeros(4,length(old2d));
-        nearest = zeros(1, length(old2d));
-        least_d = zeros(1, length(old2d));
         % Reconstruct 3D points using triangulation
-        for i =1:length(old2d)
-            X1 = [Feature(1:2,old2d(i),old(idx));1];
-            X2 = [Feature(1:2,new2d(i), new);1];
-            for k =1:length(old2d)
-                X22 = [Feature(1:2,new2d(k), new);1];
-                d2 = (X2(1)-X22(1)).^2 + (X2(2)-X22(2)).^2;
-                if(k==1 && d2>0)
-                    nearest(i) = 1;
-                    least_d(i) = d2;
-                elseif((d2<least_d(i) && d>0) || least_d(i) ==0)
-                    nearest(i) = k;
-                    least_d(i) = d2;
-                end
-            end
-            %A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X1(1)*p3T1 - X1(2)*p1T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2; X2(1)*p3T2 - X2(2)*p1T2];
-            A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2];
-            [U, O, V] = svd(A);
-            Xtmp = V(:,end);
-            %Xtmp = Xtmp/sign(Xtmp(3));
-            %Xtmp = Xtmp/sign(Xtmp(4));
-            Xtmp = Xtmp/(Xtmp(4)+eps);
-            Xori = X4(1:4,idx3(i));
-            ratio(:,i) = Xori./Xtmp;
-        end
-        ratio2 = zeros(4, length(old2d));
-        for i =1:length(old2d)
-            ratio2(:,i) = ratio(:,i) ./ ratio(:,nearest(i));
-        end
-        diff = median(abs(ratio2),2)
+        
         num_inliers = 0;
         
         for i = 1:num_Match(old(idx),new)
@@ -656,12 +539,7 @@ for picture = 3 : number_of_pictures
             A = [X1(1)*p3T1 - p1T1; X1(2)*p3T1 - p2T1; X2(1)*p3T2 - p1T2; X2(2)*p3T2 - p2T2];
             [U, O, V] = svd(A);
             Xtmp = V(:,end);
-            %Xtmp = mean(ratio)*Xtmp;
-            %Xtmp = Xtmp/sign(Xtmp(3));
-            %Xtmp = ratio(nearest).*Xtmp;
-            %Xtmp = Xtmp*mean(median(ratio(1:3),2));
             Xtmp = Xtmp/(Xtmp(4) + eps);
-            %Xtmp = Xtmp/sign(Xtmp(4));
             Xcam1 = [[R(:,:,old(idx)),T(:,old(idx))];0 0 0 1]*Xtmp;
             Xcam2 = [[R(:,:,new),T(:,new)];0 0 0 1]*Xtmp;
             
@@ -673,16 +551,10 @@ for picture = 3 : number_of_pictures
             x2 = x2./(x2(3)+eps);
             d1 = (x1(1,:)-X1(1,:)).^2 + (x1(2,:)-X1(2,:)).^2;
             d2 = (x2(1,:)-X2(1,:)).^2 + (x2(2,:)-X2(2,:)).^2;
-            distance(1,i) = d1;
-            distance(2,i) = d2;
             if(d1+d2<threshold_of_distance)
                 x1 = round(x1);
                 x = max(min(x1(2), w), 1);
                 y = max(min(x1(1), h), 1);
-                
-                X4(1:4,idx3d) = Xtmp;
-                X4(5:7,idx3d) = double(imga(x, y,:))/255;
-                
                 
                 X(1:3,idx3d) = Xtmp(1:3);
                 X(4:6, idx3d) = double(imga(x, y,:))/255;
@@ -695,18 +567,18 @@ for picture = 3 : number_of_pictures
             end  
             
         end
-        
     end
-    % Optimize all R|T and all 3D points
     if(kidx ==1)
         X(:,idx3d) = [mean(Cam2,2);[1, 0, 0]']; X_exist(idx3d)=1;
         idx3d = idx3d+1;
     end
+    % Optimize all R|T and all 3D points
+    
     % Reduce duplicate points
     
     
     % Save 3D points to PLY
-    figure(picture-1);scatter3(X(1,1:idx3d), X(2,1:idx3d), X(3,1:idx3d),50,X(4:6,1:idx3d)');
+    %figure(picture-1);scatter3(X(1,1:idx3d), X(2,1:idx3d), X(3,1:idx3d),50,X(4:6,1:idx3d)');
     filename = sprintf('%02d_%02dviews.ply', picture, new);
     %SavePLY(filename, X, X_exist);
     SavePLY(filename, X);
