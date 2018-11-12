@@ -1,6 +1,6 @@
 *.mat
 *.mexw64
-
+*.zip
 *.ply
 *.jpg
 *.JPG
@@ -8,3 +8,5 @@
 
 *.asv
 *.swp
+vlfeat-0.9.21-bin/
+vlfeat-0.9.21
