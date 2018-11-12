@@ -404,7 +404,7 @@ p2T2 = P3(2,:);
 p3T2 = P3(3,:);
         
 Cam1 = [0.000, 0.000, 0.000]';
-mask=sum(Cam2,1)>0;
+mask=sum(Cam2,1)~=0;
 Cam2 = Cam2.*repmat(mask,3,1);
 Cam2 = reshape(Cam2(find(Cam2)),3,[]);
 Cam2 = mean(Cam2,2);
@@ -614,11 +614,11 @@ for picture = 3 : number_of_pictures
             
         end
         if(idx ==I(1))
-            mask=sum(Cam1,1)>0;
+            mask=sum(Cam1,1)~=0;
             Cam1 = Cam1.*repmat(mask,3,1);
             Cam1 = reshape(Cam1(find(Cam1)),3,[]);
             Cam1 = median(Cam1,2);
-            mask=sum(Cam2,1)>0;
+            mask=sum(Cam2,1)~=0;
             Cam2 = Cam2.*repmat(mask,3,1);
             Cam2 = reshape(Cam2(find(Cam2)),3,[]);
             Cam22 = median(Cam2,2);
